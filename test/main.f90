@@ -15,7 +15,7 @@
 program tester
   use, intrinsic :: iso_fortran_env, only : error_unit
   use testdrive, only : run_testsuite, new_testsuite, testsuite_type, &
-    & select_suite, run_selected, get_argument
+    & select_suite, run_selected, get_argument, context_t
   use test_check, only : collect_check
   use test_select, only : collect_select
   implicit none
@@ -23,6 +23,7 @@ program tester
   character(len=:), allocatable :: suite_name, test_name
   type(testsuite_type), allocatable :: testsuites(:)
   character(len=*), parameter :: fmt = '("#", *(1x, a))'
+  type(context_t) :: context
 
   stat = 0
 
@@ -45,7 +46,7 @@ program tester
         end if
       else
         write(error_unit, fmt) "Testing:", testsuites(is)%name
-        call run_testsuite(testsuites(is)%collect, error_unit, stat)
+        call run_testsuite(testsuites(is)%collect, error_unit, stat, context=context)
       end if
     else
       write(error_unit, fmt) "Available testsuites"
@@ -57,14 +58,10 @@ program tester
   else
     do is = 1, size(testsuites)
       write(error_unit, fmt) "Testing:", testsuites(is)%name
-      call run_testsuite(testsuites(is)%collect, error_unit, stat)
+      call run_testsuite(testsuites(is)%collect, error_unit, stat, context=context)
     end do
   end if
 
-  if (stat > 0) then
-    write(error_unit, '(i0, 1x, a)') stat, "test(s) failed!"
-    error stop 1
-  end if
-
+  call context%report()
 
 end program tester

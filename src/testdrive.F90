@@ -109,7 +109,7 @@ module testdrive
   private
 
   public :: run_testsuite, run_selected, new_unittest, new_testsuite
-  public :: select_test, select_suite
+  public :: select_test, select_suite, context_t
   public :: unittest_type, testsuite_type, error_type
   public :: check, test_failed, skip_test
   public :: test_interface, collect_interface
@@ -153,6 +153,15 @@ module testdrive
   !> Error code for skipped test
   integer, parameter :: skipped = 77
 
+
+  type :: context_t
+    integer :: pass_count, fail_count
+    integer :: total_pass, total_fail
+    integer :: skipped_count
+    integer :: expected_fail_count, unexpected_pass_count
+    contains
+      procedure :: report
+  end type context_t
 
   !> Error message
   type :: error_type
@@ -309,9 +318,30 @@ module testdrive
 
 contains
 
+  subroutine report(this)
+
+    class(context_t), intent(in) :: this
+
+    integer :: total
+
+    total = this%total_fail + this%total_pass + this%skipped_count
+
+    print*,new_line("a")
+    print"(a)",repeat("=",35)
+    print"(a,5x,i0.2)","Tests run:",total
+    print"(a,2x,i0.2,a,i0)","Tests passed:",this%pass_count + this%expected_fail_count,"/",this%total_pass&
+     + this%total_fail
+    print"(a,2x,i0.2,a,i0)","Tests failed:",this%fail_count,"/",this%total_fail + this%total_pass
+    print"(a,1x,i0)","Tests skipped:",this%skipped_count
+    print"(a,4x,i0,a,i0)","Tests expected to fail:",this%expected_fail_count,"/",this%total_pass - this%pass_count
+    print"(a,1x,i0)","Tests unexpectedly passed:",this%unexpected_pass_count
+    print"(a)",repeat("=",35)
+
+  end subroutine report
+
 
   !> Driver for testsuite
-  recursive subroutine run_testsuite(collect, unit, stat, parallel)
+  recursive subroutine run_testsuite(collect, unit, stat, parallel, context)
 
     !> Collect tests
     procedure(collect_interface) :: collect
@@ -325,6 +355,9 @@ contains
     !> Run the tests in parallel
     logical, intent(in), optional :: parallel
 
+    type(context_t), optional :: context
+    type(context_t) :: cont
+
     type(unittest_type), allocatable :: testsuite(:)
     integer :: it
     logical :: parallel_
@@ -333,6 +366,11 @@ contains
     if(present(parallel)) parallel_ = parallel
 
     call collect(testsuite)
+    if(present(context))then
+      cont = context
+    else
+      cont = context_t(0, 0, 0, 0, 0, 0, 0)
+    end if
 
     !$omp parallel do schedule(dynamic) shared(testsuite, unit) reduction(+:stat) &
     !$omp if (parallel_)
@@ -341,9 +379,9 @@ contains
       write(unit, '(1x, 3(1x, a), 1x, "(", i0, "/", i0, ")")') &
         & "Starting", testsuite(it)%name, "...", it, size(testsuite)
       !$omp end critical(testdrive_testsuite)
-      call run_unittest(testsuite(it), unit, stat)
+      call run_unittest(testsuite(it), unit, stat, cont)
     end do
-
+    if(present(context))context = cont
   end subroutine run_testsuite
 
 
@@ -359,6 +397,8 @@ contains
     !> Unit for IO
     integer, intent(in) :: unit
 
+    type(context_t) :: context
+
     !> Number of failed tests
     integer, intent(inout) :: stat
 
@@ -370,7 +410,7 @@ contains
     it = select_test(testsuite, name)
 
     if (it > 0 .and. it <= size(testsuite)) then
-      call run_unittest(testsuite(it), unit, stat)
+      call run_unittest(testsuite(it), unit, stat, context)
     else
       write(unit, fmt) "Available tests:"
       do it = 1, size(testsuite)
@@ -383,7 +423,7 @@ contains
 
 
   !> Run a selected unit test
-  recursive subroutine run_unittest(test, unit, stat)
+  recursive subroutine run_unittest(test, unit, stat, context)
 
     !> Unit test
     type(unittest_type), intent(in) :: test
@@ -394,6 +434,9 @@ contains
     !> Number of failed tests
     integer, intent(inout) :: stat
 
+    !> Context type
+    type(context_t), intent(inout) :: context
+
     type(error_type), allocatable :: error
     character(len=:), allocatable :: message
 
@@ -401,7 +444,7 @@ contains
     if (.not.test_skipped(error)) then
       if (allocated(error) .neqv. test%should_fail) stat = stat + 1
     end if
-    call make_output(message, test, error)
+    call make_output(message, test, error, context)
     !$omp critical(testdrive_testsuite)
     write(unit, '(a)') message
     !$omp end critical(testdrive_testsuite)
@@ -429,10 +472,12 @@ contains
 
 
   !> Create output message for test (this procedure is pure and therefore cannot launch tests)
-  pure subroutine make_output(output, test, error)
+  pure subroutine make_output(output, test, error, context)
 
     !> Output message for display
     character(len=:), allocatable, intent(out) :: output
+
+    type(context_t), intent(inout) :: context
 
     !> Unit test
     type(unittest_type), intent(in) :: test
@@ -444,22 +489,29 @@ contains
     character(len=*), parameter :: indent = repeat(" ", 7) // repeat(".", 3) // " "
 
     if (test_skipped(error)) then
+      context%skipped_count = context%skipped_count + 1
       output = indent // test%name // " [SKIPPED]" &
         & // new_line("a") // "  Message: " // error%message
       return
     end if
 
     if (present(error) .neqv. test%should_fail) then
+        context%total_fail = context%total_fail + 1
       if (test%should_fail) then
         label = " [UNEXPECTED PASS]"
+        context%unexpected_pass_count = context%unexpected_pass_count + 1
       else
         label = " [FAILED]"
+        context%fail_count = context%fail_count + 1
       end if
     else
+      context%total_pass = context%total_pass + 1
       if (test%should_fail) then
         label = " [EXPECTED FAIL]"
+        context%expected_fail_count = context%expected_fail_count + 1
       else
         label = " [PASSED]"
+        context%pass_count = context%pass_count + 1
       end if
     end if
     output = indent // test%name // label
