@@ -153,13 +153,18 @@ module testdrive
   !> Error code for skipped test
   integer, parameter :: skipped = 77
 
-
+  !> Context type for tracking test pass/fail counts
   type :: context_t
+    !> pass fail counts
     integer :: pass_count, fail_count
+    !> total tests that should fail or pass
     integer :: total_pass, total_fail
+    !> skipped test counts
     integer :: skipped_count
+    !> expected and unexpected tests counts
     integer :: expected_fail_count, unexpected_pass_count
     contains
+      !> Pretty print of tests counts
       procedure :: report
   end type context_t
 
@@ -317,9 +322,10 @@ module testdrive
 
 
 contains
-
+  !> Pretty print of test counts
   subroutine report(this)
 
+    !> Context class
     class(context_t), intent(in) :: this
 
     integer :: total
@@ -355,9 +361,10 @@ contains
     !> Run the tests in parallel
     logical, intent(in), optional :: parallel
 
+    !> Context class to track test pass/fail counts
     type(context_t), optional :: context
-    type(context_t) :: cont
 
+    type(context_t) :: cont
     type(unittest_type), allocatable :: testsuite(:)
     integer :: it
     logical :: parallel_
@@ -397,6 +404,7 @@ contains
     !> Unit for IO
     integer, intent(in) :: unit
 
+    !> Context class to track test pass/fail counts
     type(context_t) :: context
 
     !> Number of failed tests
@@ -434,7 +442,7 @@ contains
     !> Number of failed tests
     integer, intent(inout) :: stat
 
-    !> Context type
+    !> Context class to track test pass/fail counts
     type(context_t), intent(inout) :: context
 
     type(error_type), allocatable :: error
@@ -477,6 +485,7 @@ contains
     !> Output message for display
     character(len=:), allocatable, intent(out) :: output
 
+    !> Context class to track test pass/fail counts
     type(context_t), intent(inout) :: context
 
     !> Unit test
