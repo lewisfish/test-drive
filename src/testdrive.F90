@@ -115,6 +115,11 @@ module testdrive
   public :: test_interface, collect_interface
   public :: get_argument, get_variable, to_string
 
+  character(len=*), parameter :: ESC = char(27)
+  character(len=*), parameter :: COLOR_RED = ESC//"[31m"
+  character(len=*), parameter :: COLOR_GREEN = ESC//"[32m"
+  character(len=*), parameter :: COLOR_RESET = ESC//"[0m"
+
 
   !> Single precision real numbers
   integer, parameter :: sp = selected_real_kind(6)
@@ -163,6 +168,7 @@ module testdrive
     integer :: skipped_count=0
     !> expected and unexpected tests counts
     integer :: expected_fail_count=0, unexpected_pass_count=0
+    logical :: NO_COLOR = .true., run_once=.false.
     contains
       !> Pretty print of tests counts
       procedure :: report
@@ -507,19 +513,35 @@ contains
     if (present(error) .neqv. test%should_fail) then
         context%total_fail = context%total_fail + 1
       if (test%should_fail) then
-        label = " [UNEXPECTED PASS]"
+        if(context%NO_COLOR)then
+          label = " [UNEXPECTED PASS]"
+        else
+          label = " [" // COLOR_RED // "UNEXPECTED PASS" // COLOR_RESET // "]"
+        end if
         context%unexpected_pass_count = context%unexpected_pass_count + 1
       else
-        label = " [FAILED]"
+        if(context%NO_COLOR)then
+          label = " [FAILED]"
+        else
+          label = " [" // COLOR_RED // "FAILED" // COLOR_RESET // "]"
+        end if
         context%fail_count = context%fail_count + 1
       end if
     else
       context%total_pass = context%total_pass + 1
       if (test%should_fail) then
-        label = " [EXPECTED FAIL]"
+        if(context%NO_COLOR)then
+          label = " [EXPECTED FAIL]"
+        else
+          label = " [" // COLOR_GREEN // "EXPECTED FAIL" // COLOR_RESET // "]"
+        end if
         context%expected_fail_count = context%expected_fail_count + 1
       else
-        label = " [PASSED]"
+        if(context%NO_COLOR)then
+          label = " [PASSED]"
+        else  
+          label = " [" // COLOR_GREEN // "PASSED" // COLOR_RESET // "]"
+        end if
         context%pass_count = context%pass_count + 1
       end if
     end if
@@ -603,16 +625,33 @@ contains
 
 
   !> Register a new testsuite
-  function new_testsuite(name, collect) result(self)
+  function new_testsuite(name, collect, context) result(self)
 
     !> Name of the testsuite
     character(len=*), intent(in) :: name
+
+    type(context_t), intent(inout) :: context
 
     !> Entry point to collect tests
     procedure(collect_interface) :: collect
 
     !> Newly registered testsuite
     type(testsuite_type) :: self
+
+    integer :: color_status
+    character(len=255) :: color_value
+
+    !> flag NO_COLOR from environmental variable - run this once when testsuite created
+
+    if (.not.context%run_once) then
+      call get_environment_variable("NO_COLOR", color_value, STATUS=color_status)
+      if (color_status.eq.0) then
+        context%NO_COLOR = .true.
+      else
+        context%NO_COLOR = .false.
+      end if
+      context%run_once = .true.
+    end if
 
     self%name = name
     self%collect => collect
