@@ -156,13 +156,13 @@ module testdrive
   !> Context type for tracking test pass/fail counts
   type :: context_t
     !> pass fail counts
-    integer :: pass_count, fail_count
+    integer :: pass_count=0, fail_count=0
     !> total tests that should fail or pass
-    integer :: total_pass, total_fail
+    integer :: total_pass=0, total_fail=0
     !> skipped test counts
-    integer :: skipped_count
+    integer :: skipped_count=0
     !> expected and unexpected tests counts
-    integer :: expected_fail_count, unexpected_pass_count
+    integer :: expected_fail_count=0, unexpected_pass_count=0
     contains
       !> Pretty print of tests counts
       procedure :: report
